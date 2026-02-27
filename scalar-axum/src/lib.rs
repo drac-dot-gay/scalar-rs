@@ -235,10 +235,7 @@ where
                 scalar_cms::db::AuthenticationError::BadToken
                 | scalar_cms::db::AuthenticationError::BadCredentials => StatusCode::UNAUTHORIZED,
                 scalar_cms::db::AuthenticationError::DatabaseError(e) => {
-                    tracing::error!(
-                        cause = &e as &dyn Error,
-                        "failed to authenticate connection"
-                    );
+                    tracing::error!(cause = ?e, "failed to authenticate connection");
                     StatusCode::INTERNAL_SERVER_ERROR
                 }
             })?;

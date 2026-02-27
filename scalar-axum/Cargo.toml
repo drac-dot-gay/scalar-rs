@@ -36,13 +36,14 @@ axum = { version = "0.8", features = ["multipart", "http2"] }
 axum-macros = "0.5"
 scalar-img = { path = "../scalar-img" }
 scalar-surreal = { path = "../scalar-surreal", features = ["oidc"] }
-surrealdb = { version = "2" }
+surrealdb = { version = "3" }
 tokio = { version = "1", features = ["rt-multi-thread", "fs"] }
 tower-http = { version = "0.5", features = ["cors", "fs"] }
 thiserror = {workspace = true}
 dotenvy = "0.15.7"
 anyhow = { version = "1.0.98", features = ["backtrace"] }
 url = {workspace = true}
+tracing-subscriber = "0.3.22"
 
 [lints]
 workspace = true

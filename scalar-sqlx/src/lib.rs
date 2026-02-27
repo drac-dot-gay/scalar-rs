@@ -327,6 +327,7 @@ where
     async fn vctx_all<D: Document>(
         &self,
         excl_id: &str,
+        field_name: &str,
         expression: Expression,
     ) -> Result<bool, Self::Error> {
         todo!()
@@ -334,6 +335,7 @@ where
     async fn vctx_none<D: Document>(
         &self,
         excl_id: &str,
+        field_name: &str,
         expression: Expression,
     ) -> Result<bool, Self::Error> {
         todo!()
@@ -341,6 +343,7 @@ where
     async fn vctx_any<D: Document>(
         &self,
         excl_id: &str,
+        field_name: &str,
         expression: Expression,
     ) -> Result<bool, Self::Error> {
         todo!()

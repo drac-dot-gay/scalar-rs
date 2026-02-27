@@ -170,6 +170,9 @@ struct AppState {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv()?;
+
+    tracing_subscriber::fmt().init();
+
     let http_client = ClientBuilder::new()
         .danger_accept_invalid_certs(true)
         // Following redirects opens the client up to SSRF vulnerabilities.
