@@ -1,8 +1,7 @@
 use proc_macro::TokenStream;
 use unsynn::{
-    AndAnd, DelimitedVec, Either, Equal, Ident, LeftAssocExpr, Literal, NonAssocExpr, NotEqual,
-    OrOr, ParenthesisGroupContaining, Parse, ToTokenIter, TrailingDelimiter::Forbidden, quote,
-    unsynn,
+    AndAnd, DelimitedVec, Either, Equal, Ident, LeftAssocExpr, Literal, NotEqual, OrOr, Parse,
+    ToTokenIter, TrailingDelimiter::Forbidden, quote, unsynn,
 };
 use unsynn::{Colon, Cons, Dollar, LiteralString, ToTokens};
 

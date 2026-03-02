@@ -2,7 +2,10 @@ use std::{fmt::Display, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{db::ValidationContext, DatabaseConnection, Document};
+use crate::{
+    db::{ContentActions, ValidationContext},
+    DatabaseConnection, Document,
+};
 
 /// A wrapper type to indicate that the inner type is valid.
 #[derive(Debug, Serialize)]
@@ -15,7 +18,7 @@ impl<T: Document + Sync> Valid<T> {
     /// # Errors
     ///
     /// This function will return an error if validation fails.
-    pub async fn new<DB: DatabaseConnection + Sync>(
+    pub async fn new<DB: DatabaseConnection + ContentActions<T> + Sync>(
         val: T,
         ctx: ValidationContext<'_, DB, T>,
     ) -> Result<Self, ValidationError> {
@@ -77,14 +80,14 @@ pub trait Validate {
     /// # Errors
     ///
     /// This function will return an error if validation fails.
-    async fn validate<DB: DatabaseConnection + Sync, D: Document + Sync>(
+    async fn validate<DB: DatabaseConnection + ContentActions<D> + Sync, D: Document + Sync>(
         &self,
         ctx: ValidationContext<'_, DB, D>,
     ) -> Result<(), ValidationError>;
 }
 
 impl<T: Validate + Sync> Validate for Option<T> {
-    async fn validate<DB: DatabaseConnection + Sync, D: Document + Sync>(
+    async fn validate<DB: DatabaseConnection + ContentActions<D> + Sync, D: Document + Sync>(
         &self,
         ctx: ValidationContext<'_, DB, D>,
     ) -> Result<(), ValidationError> {
@@ -127,7 +130,7 @@ macro_rules! validator {
         }
 
         impl Validate for $ty {
-            async fn validate<DB: DatabaseConnection + Sync, D: Document>(
+            async fn validate<DB: DatabaseConnection + ContentActions<D> + Sync, D: Document>(
                 &self,
                 _ctx: ValidationContext<'_, DB, D>,
             ) -> Result<(), ValidationError> {

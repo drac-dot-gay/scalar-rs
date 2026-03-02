@@ -4,7 +4,7 @@ use std::{error::Error, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use scalar_expr::Expression;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{validations::Valid, Document, Item};
@@ -108,7 +108,7 @@ impl<DB: DatabaseConnection, D: Document> Clone for ValidationContext<'_, DB, D>
 }
 impl<DB: DatabaseConnection, D: Document> Copy for ValidationContext<'_, DB, D> {}
 
-impl<'a, 'b, DB: DatabaseConnection, D: Document> ValidationContext<'a, DB, D>
+impl<'a, 'b, DB: DatabaseConnection + ContentActions<D>, D: Document> ValidationContext<'a, DB, D>
 where
     'b: 'a,
     'a: 'b,
@@ -134,17 +134,17 @@ where
 
     pub async fn all(&self, expr: Expression) -> Result<bool, DB::Error> {
         self.conn
-            .vctx_all::<D>(self.excluded_id, self.field_name, expr)
+            .vctx_all(self.excluded_id, self.field_name, expr)
             .await
     }
     pub async fn none(&self, expr: Expression) -> Result<bool, DB::Error> {
         self.conn
-            .vctx_none::<D>(self.excluded_id, self.field_name, expr)
+            .vctx_none(self.excluded_id, self.field_name, expr)
             .await
     }
     pub async fn any(&self, expr: Expression) -> Result<bool, DB::Error> {
         self.conn
-            .vctx_any::<D>(self.excluded_id, self.field_name, expr)
+            .vctx_any(self.excluded_id, self.field_name, expr)
             .await
     }
 }
@@ -197,57 +197,49 @@ pub trait DatabaseConnection {
         &self,
         user_info: &openidconnect::IdTokenClaims<AC, GC>,
     ) -> Result<String, AuthenticationError<Self::Error>>;
+}
 
-    async fn draft<D: Document + Send>(
+#[trait_variant::make(Send + Sized)]
+pub trait ContentActions<D: Document>: DatabaseConnection {
+    async fn draft(
         conn: &Authenticated<Self>,
         id: &str,
         data: serde_json::Value,
     ) -> Result<Item<serde_json::Value>, Self::Error>;
-    async fn delete_draft<D: Document + Send + DeserializeOwned>(
+    async fn delete_draft(
         conn: &Authenticated<Self>,
         id: &str,
     ) -> Result<Item<serde_json::Value>, Self::Error>;
 
-    async fn publish<D: Document + Send + Sync + Serialize + DeserializeOwned + 'static>(
+    async fn publish(
         conn: &Authenticated<Self>,
         id: &str,
         publish_at: Option<DateTime<Utc>>,
         data: Valid<D>,
     ) -> Result<Item<D>, Self::Error>;
-    async fn unpublish<D: Document + Send + Serialize + DeserializeOwned + 'static>(
-        conn: &Authenticated<Self>,
-        id: &str,
-    ) -> Result<Option<D>, Self::Error>;
+    async fn unpublish(conn: &Authenticated<Self>, id: &str) -> Result<Option<D>, Self::Error>;
 
-    async fn put<D: Document + Serialize + DeserializeOwned + Send + Debug + 'static>(
-        conn: &Authenticated<Self>,
-        item: Item<D>,
-    ) -> Result<Item<D>, Self::Error>;
-    async fn delete<D: Document + Send + Debug>(
+    async fn put(conn: &Authenticated<Self>, item: Item<D>) -> Result<Item<D>, Self::Error>;
+    async fn delete(
         conn: &Authenticated<Self>,
         id: &str,
     ) -> Result<Option<Item<serde_json::Value>>, Self::Error>;
-    async fn get_all<D: Document + DeserializeOwned + Send>(
-        &self,
-    ) -> Result<Vec<Item<serde_json::Value>>, Self::Error>;
-    async fn get_by_id<D: Document + DeserializeOwned + Send>(
-        &self,
-        id: &str,
-    ) -> Result<Option<Item<serde_json::Value>>, Self::Error>;
+    async fn get_all(&self) -> Result<Vec<Item<serde_json::Value>>, Self::Error>;
+    async fn get_by_id(&self, id: &str) -> Result<Option<Item<serde_json::Value>>, Self::Error>;
 
-    async fn vctx_all<D: Document>(
+    async fn vctx_all(
         &self,
         excl_id: &str,
         field_name: &str,
         expression: Expression,
     ) -> Result<bool, Self::Error>;
-    async fn vctx_none<D: Document>(
+    async fn vctx_none(
         &self,
         excl_id: &str,
         field_name: &str,
         expression: Expression,
     ) -> Result<bool, Self::Error>;
-    async fn vctx_any<D: Document>(
+    async fn vctx_any(
         &self,
         excl_id: &str,
         field_name: &str,

@@ -386,7 +386,7 @@ pub fn derive_document(input: TokenStream) -> TokenStream {
 
         #[automatically_derived]
         impl ::scalar_cms::validations::Validate for #ident {
-            async fn validate<DB: ::scalar_cms::db::DatabaseConnection + Sync, D: ::scalar_cms::Document + Sync>(&self, ctx: ::scalar_cms::db::ValidationContext<'_, DB, D>) -> Result<(), ::scalar_cms::validations::ValidationError> {
+            async fn validate<DB: ::scalar_cms::db::DatabaseConnection + ::scalar_cms::db::ContentActions<D> + Sync, D: ::scalar_cms::Document + Sync>(&self, ctx: ::scalar_cms::db::ValidationContext<'_, DB, D>) -> Result<(), ::scalar_cms::validations::ValidationError> {
                 let results: [(::scalar_cms::validations::Field, Result<(), ::scalar_cms::validations::ValidationError>); #validators_count] = [#(#validators),*];
 
                 let errors: Vec<::scalar_cms::validations::ErroredField> = results

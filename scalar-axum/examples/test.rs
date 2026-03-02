@@ -9,7 +9,10 @@ use scalar_cms::{
 };
 use scalar_surreal::{init, SurrealStore};
 use std::env;
-use surrealdb::engine::remote::ws::{Client, Ws};
+use surrealdb::{
+    engine::remote::ws::{Client, Ws},
+    types::SurrealValue,
+};
 
 use axum::Router;
 use axum_macros::FromRef;
@@ -69,7 +72,8 @@ async fn string_test<DB: DatabaseConnection, D: Document>(
         ))
 }
 
-#[derive(Document, Debug, Serialize, Deserialize)]
+#[derive(Document, Debug, SurrealValue, Serialize, Deserialize)]
+#[surreal(crate = "surrealdb::types")]
 struct AllTypes {
     #[validate(skip)]
     bool: bool,
@@ -82,31 +86,40 @@ struct AllTypes {
     single_line: String,
     #[validate(skip)]
     #[field(sublabel)]
+    #[surreal(wrap)]
     multi_line: MultiLine,
     #[validate(skip)]
+    #[surreal(wrap)]
     markdown: Markdown,
     #[validate(skip)]
     array: Vec<String>,
     #[validate(skip)]
+    #[surreal(wrap)]
     toggle: Toggle<i32>,
     #[validate(skip)]
     date: NaiveDate,
     #[validate(skip)]
     date_time: DateTime<Utc>,
     #[validate(skip)]
+    #[surreal(wrap)]
     color: RGB8,
     #[validate(skip)]
+    #[surreal(wrap)]
     color_alpha: RGBA8,
     #[validate(skip)]
+    #[surreal(wrap)]
     image: ImageData<ImageInner>,
+    #[surreal(wrap)]
     cropped_image: CroppedImage,
     #[validate(skip)]
+    #[surreal(wrap)]
     file: FileData<()>,
     enum_select: TestEnum,
     struct_test: StructTest,
 }
 
-#[derive(EditorField, Debug, Serialize, Deserialize)]
+#[derive(EditorField, Debug, SurrealValue, Serialize, Deserialize)]
+#[surreal(crate = "surrealdb::types")]
 struct StructTest {
     info: String,
 }
@@ -132,7 +145,7 @@ struct ImageInner {
     info: String,
 }
 
-#[derive(Document, Debug, Serialize, Deserialize, Clone)]
+#[derive(Document, Debug, SurrealValue, Serialize, Deserialize, Clone)]
 #[document(singleton)]
 struct Test2 {
     #[validate(skip)]
@@ -140,7 +153,8 @@ struct Test2 {
 }
 
 #[doc_enum]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, SurrealValue)]
+#[surreal(crate = "surrealdb::types")]
 enum TestEnum {
     Unit,
     Struct { eeee: String },

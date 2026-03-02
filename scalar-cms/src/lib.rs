@@ -27,7 +27,7 @@ use validations::Validate;
 
 pub use scalar_expr as expr;
 
-use crate::db::ValidationContext;
+use crate::db::{ContentActions, ValidationContext};
 
 #[derive(Serialize, TS)]
 #[ts(export)]
@@ -85,7 +85,7 @@ pub struct Item<D> {
 }
 
 impl<D: Document + Send + Sync> Validate for Item<D> {
-    async fn validate<DB: DatabaseConnection + Sync, DD: Document + Sync>(
+    async fn validate<DB: DatabaseConnection + ContentActions<DD> + Sync, DD: Document + Sync>(
         &self,
         ctx: ValidationContext<'_, DB, DD>,
     ) -> Result<(), validations::ValidationError> {

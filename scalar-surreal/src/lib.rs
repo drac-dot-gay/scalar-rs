@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Debug, ops::Deref, sync::Arc};
+use std::{fmt::Debug, ops::Deref};
 
 #[cfg(feature = "oidc")]
 use openidconnect::{
@@ -6,25 +6,24 @@ use openidconnect::{
     SubjectIdentifier,
 };
 use scalar_cms::{
-    db::{Authenticated, AuthenticationError, Credentials, DatabaseFactory, User},
+    db::{Authenticated, AuthenticationError, ContentActions, Credentials, DatabaseFactory, User},
     expr::Expression,
     validations::Valid,
     DateTime, Document, Item, Utc,
 };
-use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use surrealdb::{
     opt::{
         auth::{Record, Root},
         IntoEndpoint,
     },
-    types::{AuthError, ErrorDetails, NotAllowedError, RecordId, RecordIdKey, SurrealValue, Table},
-    Connection, Error, Surreal,
+    types::{
+        AuthError, ErrorDetails, NotAllowedError, RecordId, RecordIdKey, SerdeWrapper,
+        SurrealValue, Table,
+    },
+    Connection, Surreal,
 };
-
-use crate::serde_wrapper::Wrapper;
-
-mod serde_wrapper;
 
 #[derive(SurrealValue)]
 #[surreal(crate = "surrealdb::types")]
@@ -99,15 +98,15 @@ impl<C: Connection + Debug> Deref for SurrealConnection<C> {
 
 #[derive(SurrealValue, Debug)]
 #[surreal(crate = "surrealdb::types")]
-pub struct SurrealItem<'a, D: Serialize + DeserializeOwned> {
+pub struct SurrealItem<D: SurrealValue> {
     pub id: RecordId,
     pub created_at: DateTime<Utc>,
     pub modified_at: DateTime<Utc>,
     pub published_at: Option<DateTime<Utc>>,
-    pub inner: Wrapper<'a, D>,
+    pub inner: D,
 }
 
-impl<D: Serialize + DeserializeOwned> From<SurrealItem<'_, D>> for Item<D> {
+impl<D: SurrealValue> From<SurrealItem<D>> for Item<D> {
     fn from(item: SurrealItem<D>) -> Self {
         let RecordIdKey::String(id) = item.id.key else {
             panic!("key types MUST be strings")
@@ -117,12 +116,12 @@ impl<D: Serialize + DeserializeOwned> From<SurrealItem<'_, D>> for Item<D> {
             created_at: item.created_at,
             modified_at: item.modified_at,
             published_at: item.published_at,
-            inner: item.inner.0,
+            inner: item.inner,
         }
     }
 }
 
-impl<D: Debug + Document + Serialize + DeserializeOwned> From<Item<D>> for SurrealItem<'_, D> {
+impl<D: Debug + Document + SurrealValue> From<Item<D>> for SurrealItem<D> {
     fn from(item: Item<D>) -> Self {
         Self {
             id: RecordId {
@@ -132,7 +131,7 @@ impl<D: Debug + Document + Serialize + DeserializeOwned> From<Item<D>> for Surre
             created_at: item.created_at,
             modified_at: item.modified_at,
             published_at: item.published_at,
-            inner: Wrapper::new(item.inner),
+            inner: item.inner,
         }
     }
 }
@@ -243,7 +242,7 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
                 namespace: self.namespace.clone(),
                 database: self.db.clone(),
                 access: "sc__editor".into(),
-                params: Wrapper::new(credentials),
+                params: SerdeWrapper(credentials),
             })
             .await
             .map_err(|e| match e.details() {
@@ -269,11 +268,11 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     ) -> Result<String, AuthenticationError<Self::Error>> {
         #[derive(SurrealValue)]
         #[surreal(crate = "surrealdb::types")]
-        struct OidcClaim<'a> {
-            subject: Wrapper<'a, SubjectIdentifier>,
-            username: Wrapper<'a, EndUserUsername>,
-            email: Wrapper<'a, EndUserEmail>,
-            pfp_url: Option<Wrapper<'a, EndUserPictureUrl>>,
+        struct OidcClaim {
+            subject: SerdeWrapper<SubjectIdentifier>,
+            username: SerdeWrapper<EndUserUsername>,
+            email: SerdeWrapper<EndUserEmail>,
+            pfp_url: Option<SerdeWrapper<EndUserPictureUrl>>,
         }
 
         let result = self
@@ -283,13 +282,13 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
                 database: self.db.clone(),
                 access: "sc__editor".into(),
                 params: OidcClaim {
-                    subject: Wrapper::new(user_info.subject().clone()),
-                    username: Wrapper::new(user_info.preferred_username().unwrap().clone()),
-                    email: Wrapper::new(user_info.email().unwrap().clone()),
+                    subject: SerdeWrapper(user_info.subject().clone()),
+                    username: SerdeWrapper(user_info.preferred_username().unwrap().clone()),
+                    email: SerdeWrapper(user_info.email().unwrap().clone()),
                     pfp_url: user_info
                         .picture()
                         .and_then(|v| v.get(None).cloned())
-                        .map(Wrapper::new),
+                        .map(SerdeWrapper),
                 },
             })
             .await
@@ -307,9 +306,13 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
 
         Ok(result.access.into_insecure_token())
     }
+}
 
+impl<C: Connection + Debug, D: Document + SurrealValue + Sync + Send + Serialize> ContentActions<D>
+    for SurrealConnection<C>
+{
     #[tracing::instrument(level = "debug", err, skip(conn))]
-    async fn draft<D: Document + Send>(
+    async fn draft(
         conn: &Authenticated<Self>,
         id: &str,
         data: serde_json::Value,
@@ -326,22 +329,22 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
         let mut result = transaction
             .query(
                 "
-            LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
-            LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
-            UPSERT $draft_id SET inner = $inner;
-            UPSERT $meta_id SET draft = $draft_id, modified_at = time::now();
-            SELECT
-                id,
-                created_at,
-                modified_at,
-                IF draft IS NOT NONE THEN draft.inner ELSE published.inner END AS inner,
-                published.published_at AS published_at
-            FROM $meta_id
-            FETCH draft, published;
-            ",
+        LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
+        LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
+        UPSERT $draft_id SET inner = $inner;
+        UPSERT $meta_id SET draft = $draft_id, modified_at = time::now();
+        SELECT
+            id,
+            created_at,
+            modified_at,
+            IF draft IS NOT NONE THEN draft.inner ELSE published.inner END AS inner,
+            published.published_at AS published_at
+        FROM $meta_id
+        FETCH draft, published;
+        ",
             )
             .bind(Bindings {
-                doc: D::IDENTIFIER.into(),
+                doc: D::IDENTIFIER,
                 id: id.into(),
                 inner: data,
             })
@@ -359,32 +362,34 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     }
 
     #[tracing::instrument(level = "debug", err, skip(conn))]
-    async fn delete_draft<D: Document + Send + DeserializeOwned>(
+    async fn delete_draft(
         conn: &Authenticated<Self>,
         id: &str,
     ) -> Result<Item<serde_json::Value>, Self::Error> {
         #[derive(SurrealValue)]
         #[surreal(crate = "surrealdb::types")]
-        struct Bindings {
+        struct Bindings<'a> {
             doc: &'static str,
-            id: String,
+            id: &'a str,
         }
 
         //TODO: VERY BAD!!!!
-        let pre_delete = conn.inner().get_by_id::<D>(id).await?.unwrap();
+        let pre_delete = ContentActions::<D>::get_by_id(conn.inner(), id)
+            .await?
+            .unwrap();
 
         let transaction = Surreal::clone(conn.inner()).begin().await?;
 
         transaction
             .query(
                 "LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
-            LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
-            DELETE $draft_id;
-            DELETE $meta_id WHERE published IS NONE;",
+        LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
+        DELETE $draft_id;
+        DELETE $meta_id WHERE published IS NONE;",
             )
             .bind(Bindings {
                 doc: D::IDENTIFIER,
-                id: id.to_owned().into(),
+                id,
             })
             .await?;
 
@@ -392,7 +397,7 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     }
 
     #[tracing::instrument(level = "debug", skip(conn))]
-    async fn publish<D: Document + Send + Sync + Serialize + DeserializeOwned + 'static>(
+    async fn publish(
         conn: &Authenticated<Self>,
         id: &str,
         publish_at: Option<DateTime<Utc>>,
@@ -400,38 +405,38 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     ) -> Result<Item<D>, Self::Error> {
         #[derive(SurrealValue)]
         #[surreal(crate = "surrealdb::types")]
-        struct Bindings {
+        struct Bindings<D: SurrealValue> {
             doc: &'static str,
             id: String,
             publish_at: Option<DateTime<Utc>>,
-            inner: serde_json::Value,
+            inner: D,
         }
 
         let data = data.inner();
 
         let transaction = Surreal::clone(conn.inner()).begin().await?;
         let mut result = transaction
-            .query("LET $published_id = type::thing($doc, $id);
-            LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
-            LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
-            UPSERT $published_id SET inner = $inner, published_at = IF $publish_at IS NOT NONE { <datetime>$publish_at } ELSE { NONE };
-            UPSERT $meta_id SET published = $published_id, modified_at = time::now(), draft = NONE;
-            DELETE $draft_id;
-            SELECT
-                id,
-                created_at,
-                modified_at,
-                IF draft IS NOT NONE THEN draft.inner ELSE published.inner END AS inner,
-                published.published_at AS published_at
-            FROM $meta_id
-            FETCH draft, published;",
-            )
-            .bind(Bindings {
-                doc: D::IDENTIFIER.into(),
-                id: id.into(),
-                publish_at,
-                inner: serde_json::to_value(&data).expect("whuh")
-            }).await?.check()?;
+        .query("LET $published_id = type::thing($doc, $id);
+        LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
+        LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
+        UPSERT $published_id SET inner = $inner, published_at = IF $publish_at IS NOT NONE { <datetime>$publish_at } ELSE { NONE };
+        UPSERT $meta_id SET published = $published_id, modified_at = time::now(), draft = NONE;
+        DELETE $draft_id;
+        SELECT
+            id,
+            created_at,
+            modified_at,
+            IF draft IS NOT NONE THEN draft.inner ELSE published.inner END AS inner,
+            published.published_at AS published_at
+        FROM $meta_id
+        FETCH draft, published;",
+        )
+        .bind(Bindings::<D> {
+            doc: D::IDENTIFIER,
+            id: id.into(),
+            publish_at,
+            inner: data
+        }).await?.check()?;
 
         let thingy: Option<SurrealItem<D>> = result.take(6).expect("this should always succeed");
 
@@ -441,10 +446,7 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     }
 
     #[tracing::instrument(level = "debug", skip(conn))]
-    async fn unpublish<D: Document + Send + Serialize + DeserializeOwned + 'static>(
-        conn: &Authenticated<Self>,
-        id: &str,
-    ) -> Result<Option<D>, Self::Error> {
+    async fn unpublish(conn: &Authenticated<Self>, id: &str) -> Result<Option<D>, Self::Error> {
         #[derive(SurrealValue)]
         #[surreal(crate = "surrealdb::types")]
         struct Bindings {
@@ -455,11 +457,11 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
         let mut result = transaction
             .query(
                 "LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
-            LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
-            LET $published_id = type::thing($doc, $id);
-            UPSERT $draft_id SET inner = (SELECT VALUE inner FROM ONLY $published_id);
-            UPDATE $meta_id SET draft = $draft_id, published = NONE, modified_at = time::now();
-            DELETE $published_id RETURN BEFORE;",
+        LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
+        LET $published_id = type::thing($doc, $id);
+        UPSERT $draft_id SET inner = (SELECT VALUE inner FROM ONLY $published_id);
+        UPDATE $meta_id SET draft = $draft_id, published = NONE, modified_at = time::now();
+        DELETE $published_id RETURN BEFORE;",
             )
             .bind(Bindings {
                 doc: D::IDENTIFIER,
@@ -469,16 +471,11 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
             .check()?;
 
         transaction.commit().await?;
-        result
-            .take::<Option<Wrapper<'_, D>>>(6)
-            .map(|v| v.map(|v| v.0))
+        result.take::<Option<D>>(6)
     }
 
     #[tracing::instrument(level = "debug", err)]
-    async fn put<D: Document + Serialize + DeserializeOwned + Send + Debug + 'static>(
-        conn: &Authenticated<Self>,
-        item: Item<D>,
-    ) -> Result<Item<D>, Self::Error> {
+    async fn put(conn: &Authenticated<Self>, item: Item<D>) -> Result<Item<D>, Self::Error> {
         let updated_thingy: Option<SurrealItem<D>> = conn
             .inner()
             .upsert((D::IDENTIFIER, item.id.as_str()))
@@ -491,7 +488,7 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     }
 
     #[tracing::instrument(level = "debug", err)]
-    async fn delete<D: Document + Send + Debug>(
+    async fn delete(
         conn: &Authenticated<Self>,
         id: &str,
     ) -> Result<Option<Item<serde_json::Value>>, Self::Error> {
@@ -499,11 +496,11 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
         let mut result = transaction
             .query(
                 "LET $published_id = type::thing($doc, $id);
-                    LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
-                    LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
-                    DELETE $meta_id RETURN BEFORE;
-                    DELETE $published_id RETURN BEFORE;
-                    DELETE $draft_id RETURN BEFORE;",
+                LET $draft_id = type::thing(string::concat($doc, '_draft'), $id);
+                LET $meta_id = type::thing(string::concat($doc, '_meta'), $id);
+                DELETE $meta_id RETURN BEFORE;
+                DELETE $published_id RETURN BEFORE;
+                DELETE $draft_id RETURN BEFORE;",
             )
             .bind(("doc", D::IDENTIFIER))
             .bind(("id", id.to_owned()))
@@ -537,19 +534,17 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     }
 
     #[tracing::instrument(level = "debug", err)]
-    async fn get_all<D: Document + DeserializeOwned + Send>(
-        &self,
-    ) -> Result<Vec<Item<serde_json::Value>>, Self::Error> {
+    async fn get_all(&self) -> Result<Vec<Item<serde_json::Value>>, Self::Error> {
         let result = self
             .query(
                 "SELECT
-                id,
-                created_at,
-                modified_at,
-                IF draft IS NOT NONE THEN draft.inner ELSE published.inner END AS inner,
-                published.published_at AS published_at
-            FROM type::table(string::concat($doc, '_meta'))
-            FETCH draft, published",
+            id,
+            created_at,
+            modified_at,
+            IF draft IS NOT NONE THEN draft.inner ELSE published.inner END AS inner,
+            published.published_at AS published_at
+        FROM type::table(string::concat($doc, '_meta'))
+        FETCH draft, published",
             )
             .bind(("doc", D::IDENTIFIER))
             .await?
@@ -560,32 +555,29 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     }
 
     #[tracing::instrument(level = "debug", err)]
-    async fn get_by_id<D: Document + DeserializeOwned + Send>(
-        &self,
-        id: &str,
-    ) -> Result<Option<Item<serde_json::Value>>, Self::Error> {
+    async fn get_by_id(&self, id: &str) -> Result<Option<Item<serde_json::Value>>, Self::Error> {
         #[derive(SurrealValue)]
         #[surreal(crate = "surrealdb::types")]
-        struct Bindings {
+        struct Bindings<'a> {
             doc: &'static str,
-            id: String,
+            id: &'a str,
         }
 
         Ok(self
             .query(
                 "LET $meta_id = type::thing(string::concat($doc, '_meta'), $id)
-            SELECT
-                id,
-                created_at,
-                modified_at,
-                IF draft IS NOT NONE THEN draft.inner ELSE published.inner END AS inner,
-                published.published_at AS published_at
-            FROM $meta_id
-            FETCH draft, published",
+        SELECT
+            id,
+            created_at,
+            modified_at,
+            IF draft IS NOT NONE THEN draft.inner ELSE published.inner END AS inner,
+            published.published_at AS published_at
+        FROM $meta_id
+        FETCH draft, published",
             )
             .bind(Bindings {
-                doc: D::IDENTIFIER.into(),
-                id: id.into(),
+                doc: D::IDENTIFIER,
+                id,
             })
             .await?
             .check()?
@@ -593,7 +585,7 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
             .map(Into::into))
     }
 
-    async fn vctx_all<D: Document>(
+    async fn vctx_all(
         &self,
         excl_id: &str,
         field_name: &str,
@@ -604,10 +596,10 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
             .into_iter()
             .fold(
                 self.query(format!(
-                   "count(SELECT * FROM {0} WHERE record::id(id) != $excl_id AND ({where_clause}));
-                    count(SELECT * FROM {0} WHERE record::id(id) != $excl_id)",
-                    D::IDENTIFIER
-                ))
+               "count(SELECT * FROM {0} WHERE record::id(id) != $excl_id AND ({where_clause}));
+                count(SELECT * FROM {0} WHERE record::id(id) != $excl_id)",
+                D::IDENTIFIER
+            ))
                 .bind(("excl_id", excl_id.to_string())),
                 surrealdb::method::Query::bind,
             )
@@ -618,7 +610,7 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
 
         Ok(cond_count == total)
     }
-    async fn vctx_none<D: Document>(
+    async fn vctx_none(
         &self,
         excl_id: &str,
         field_name: &str,
@@ -642,7 +634,7 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
 
         Ok(cond_count == 0)
     }
-    async fn vctx_any<D: Document>(
+    async fn vctx_any(
         &self,
         excl_id: &str,
         field_name: &str,

@@ -251,9 +251,7 @@ impl<
         Self {
             oidc_client,
             reqwest_client,
-            auth_states: Arc::new(Mutex::new(ExpiringHashMap::new(Duration::from_secs(
-                60 * 10,
-            )))),
+            auth_states: Arc::new(Mutex::new(ExpiringHashMap::new(Duration::from_mins(10)))),
         }
     }
 }

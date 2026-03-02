@@ -18,7 +18,7 @@ axum = "0.8"
 rgb = { version = "0.8", features = ["serde"] }
 scalar-cms = { version = "0.1.0", path = "../scalar-cms", features = ["rgb"] }
 scalar-img = { version = "0.1.0", path = "../scalar-img", optional = true, features = ["s3"] }
-openidconnect = {workspace = true, optional = true}
+openidconnect = {workspace = true, default-features = true, optional = true}
 reqwest = "0.12"
 thiserror = "2"
 serde = {workspace = true}

@@ -4,7 +4,7 @@ use scalar_expr::expression;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    db::ValidationContext,
+    db::{ContentActions, ValidationContext},
     editor_field::ToEditorField,
     validations::{Validate, ValidationError},
     DatabaseConnection, Document,
@@ -60,7 +60,10 @@ pub struct Slug(pub String);
 deref!(Slug > str);
 
 impl Validate for Slug {
-    async fn validate<DB: DatabaseConnection + Send + Sync, D: Document + Send + Sync>(
+    async fn validate<
+        DB: DatabaseConnection + ContentActions<D> + Send + Sync,
+        D: Document + Send + Sync,
+    >(
         &self,
         ctx: ValidationContext<'_, DB, D>,
     ) -> Result<(), crate::validations::ValidationError> {

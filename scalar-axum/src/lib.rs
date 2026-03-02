@@ -7,7 +7,7 @@ use axum::{
     Json, Router,
 };
 use scalar_cms::{
-    db::{Authenticated, Credentials, DatabaseFactory, User, ValidationContext},
+    db::{Authenticated, ContentActions, Credentials, DatabaseFactory, User, ValidationContext},
     validations::{Valid, ValidationError},
     DatabaseConnection, DateTime, Document, Item, Schema, Utc,
 };
@@ -302,7 +302,10 @@ pub async fn validate<F: DatabaseFactory, D: Document + Send + Sync>(
     AuthenticatedConnection(conn): AuthenticatedConnection<F>,
     Query(ValidateQueryParams { id }): Query<ValidateQueryParams>,
     Json(doc): Json<D>,
-) -> Result<(), (StatusCode, Json<ValidationError>)> {
+) -> Result<(), (StatusCode, Json<ValidationError>)>
+where
+    <F as DatabaseFactory>::Connection: ContentActions<D>,
+{
     let ctx = ValidationContext::<'_, _, D>::new(conn.inner(), &id);
     doc.validate(ctx)
         .await
@@ -328,11 +331,12 @@ pub async fn update_draft<D: Document + Serialize + DeserializeOwned + Send, F: 
     Json(data): Json<serde_json::Value>,
 ) -> Result<Json<Item<serde_json::Value>>, StatusCode>
 where
+    <F as DatabaseFactory>::Connection: ContentActions<D>,
     <<F as scalar_cms::db::DatabaseFactory>::Connection as scalar_cms::DatabaseConnection>::Error:
         'static,
 {
     Ok(Json(
-        DatabaseConnection::draft::<D>(&state, &id, data)
+        ContentActions::draft(&state, &id, data)
             .await
             .map_err(|e| {
                 tracing::error!(cause = &e as &dyn Error, "couldn't update draft");
@@ -351,11 +355,12 @@ pub async fn delete_draft<D: Document + Serialize + DeserializeOwned + Send, F: 
     Path(id): Path<String>,
 ) -> Result<Json<Item<serde_json::Value>>, StatusCode>
 where
+    <F as DatabaseFactory>::Connection: ContentActions<D>,
     <<F as scalar_cms::db::DatabaseFactory>::Connection as scalar_cms::DatabaseConnection>::Error:
         'static,
 {
     Ok(Json(
-        DatabaseConnection::delete_draft::<D>(&state, &id)
+        ContentActions::delete_draft(&state, &id)
             .await
             .map_err(|e| {
                 tracing::error!(cause = &e as &dyn Error, "couldn't delete draft");
@@ -374,17 +379,16 @@ pub async fn delete_doc<D: Document + Serialize + DeserializeOwned + Send, F: Da
     Path(id): Path<String>,
 ) -> Result<Json<Option<Item<serde_json::Value>>>, StatusCode>
 where
+    <F as DatabaseFactory>::Connection: ContentActions<D>,
     <<F as scalar_cms::db::DatabaseFactory>::Connection as scalar_cms::DatabaseConnection>::Error:
         'static,
 {
-    Ok(Json(
-        DatabaseConnection::delete::<D>(&state, &id)
-            .await
-            .map_err(|e| {
-                tracing::error!(cause = &e as &dyn Error, "couldn't delete draft");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?,
-    ))
+    Ok(Json(ContentActions::delete(&state, &id).await.map_err(
+        |e| {
+            tracing::error!(cause = &e as &dyn Error, "couldn't delete draft");
+            StatusCode::INTERNAL_SERVER_ERROR
+        },
+    )?))
 }
 
 #[derive(Deserialize)]
@@ -407,11 +411,12 @@ pub async fn publish_doc<
     Json(PublishParams { publish_at, doc }): Json<PublishParams<D>>,
 ) -> Result<(), StatusCode>
 where
+    <F as DatabaseFactory>::Connection: ContentActions<D>,
     <<F as scalar_cms::db::DatabaseFactory>::Connection as scalar_cms::DatabaseConnection>::Error:
         'static,
 {
     let ctx = ValidationContext::new(state.inner(), &id);
-    DatabaseConnection::publish(
+    ContentActions::publish(
         &state,
         &id,
         publish_at,
@@ -441,15 +446,14 @@ pub async fn unpublish_doc<
     AuthenticatedConnection(state): AuthenticatedConnection<F>,
 ) -> Result<(), StatusCode>
 where
+    <F as DatabaseFactory>::Connection: ContentActions<D>,
     <<F as scalar_cms::db::DatabaseFactory>::Connection as scalar_cms::DatabaseConnection>::Error:
         'static,
 {
-    DatabaseConnection::unpublish::<D>(&state, &id)
-        .await
-        .map_err(|e| {
-            tracing::error!(cause = &e as &dyn Error, "couldn't unpublish document");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    ContentActions::unpublish(&state, &id).await.map_err(|e| {
+        tracing::error!(cause = &e as &dyn Error, "couldn't unpublish document");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     Ok(())
 }
@@ -463,10 +467,11 @@ pub async fn get_all_docs<D: Document + Serialize + DeserializeOwned + Send, F: 
     AuthenticatedConnection(state): AuthenticatedConnection<F>,
 ) -> Result<Json<Vec<Item<serde_json::Value>>>, StatusCode>
 where
+    <F as DatabaseFactory>::Connection: ContentActions<D>,
     <<F as scalar_cms::db::DatabaseFactory>::Connection as scalar_cms::DatabaseConnection>::Error:
         'static,
 {
-    let items = state.inner().get_all::<D>().await.map_err(|e| {
+    let items = state.inner().get_all().await.map_err(|e| {
         tracing::error!(cause = &e as &dyn Error, "couldn't get documents");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -484,12 +489,13 @@ pub async fn get_doc_by_id<D: Document + Serialize + DeserializeOwned + Send, F:
     id: Path<String>,
 ) -> Result<Json<Item<serde_json::Value>>, StatusCode>
 where
+    <F as DatabaseFactory>::Connection: ContentActions<D>,
     <<F as scalar_cms::db::DatabaseFactory>::Connection as scalar_cms::DatabaseConnection>::Error:
         'static,
 {
     state
         .inner()
-        .get_by_id::<D>(id.as_str())
+        .get_by_id(id.as_str())
         .await
         .map_err(|e| {
             tracing::error!(cause = &e as &dyn Error, "couldn't get document");

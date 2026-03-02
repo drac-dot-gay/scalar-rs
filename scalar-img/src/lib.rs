@@ -1,5 +1,5 @@
 use scalar_cms::{
-    db::ValidationContext,
+    db::{ContentActions, ValidationContext},
     editor_field::ToEditorField,
     validations::{ErroredField, Validate, ValidationError},
     DatabaseConnection, Document, EditorField,
@@ -55,7 +55,7 @@ pub struct ImageData<D: ToEditorField> {
 pub type Image = ImageData<Null>;
 
 impl<D: ToEditorField + Validate + Sync> Validate for ImageData<D> {
-    async fn validate<DB: DatabaseConnection + Sync, DD: Document + Sync>(
+    async fn validate<DB: DatabaseConnection + ContentActions<DD> + Sync, DD: Document + Sync>(
         &self,
         ctx: ValidationContext<'_, DB, DD>,
     ) -> Result<(), scalar_cms::validations::ValidationError> {
@@ -113,7 +113,7 @@ impl<const VALIDATE: bool, D: ToEditorField> CroppedImageData<D, VALIDATE> {
 }
 
 impl<D: ToEditorField + Validate + Sync> Validate for CroppedImageData<D, true> {
-    async fn validate<DB: DatabaseConnection + Sync, DD: Document + Sync>(
+    async fn validate<DB: DatabaseConnection + ContentActions<DD> + Sync, DD: Document + Sync>(
         &self,
         ctx: ValidationContext<'_, DB, DD>,
     ) -> Result<(), scalar_cms::validations::ValidationError> {
@@ -140,7 +140,10 @@ pub struct FileData<D: ToEditorField> {
 pub type File = FileData<Null>;
 
 impl<D: ToEditorField + Validate + Send + Sync> Validate for FileData<D> {
-    async fn validate<DB: DatabaseConnection + Sync, DD: Document + Send + Sync>(
+    async fn validate<
+        DB: DatabaseConnection + ContentActions<DD> + Sync,
+        DD: Document + Send + Sync,
+    >(
         &self,
         ctx: ValidationContext<'_, DB, DD>,
     ) -> Result<(), scalar_cms::validations::ValidationError> {
