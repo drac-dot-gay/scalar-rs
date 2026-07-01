@@ -292,16 +292,19 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
                 },
             })
             .await
-            .map_err(|e| match e.details() {
-                ErrorDetails::Validation(_) => {
-                    let e: Box<dyn std::error::Error> = Box::new(e);
-                    tracing::error!(e, "query error");
-                    AuthenticationError::BadCredentials
+            .map_err(|e| {
+                tracing::error!(%e, "query error");
+                match e.details() {
+                    ErrorDetails::Validation(_) => {
+                        let e: Box<dyn std::error::Error> = Box::new(e);
+                        tracing::error!(e, "query error");
+                        AuthenticationError::BadCredentials
+                    }
+                    ErrorDetails::NotAllowed(Some(NotAllowedError::Auth(
+                        AuthError::InvalidAuth,
+                    ))) => AuthenticationError::BadCredentials,
+                    _ => e.into(),
                 }
-                ErrorDetails::NotAllowed(Some(NotAllowedError::Auth(AuthError::InvalidAuth))) => {
-                    AuthenticationError::BadCredentials
-                }
-                _ => e.into(),
             })?;
 
         Ok(result.access.into_insecure_token())
