@@ -166,8 +166,8 @@ impl<C: Connection + Clone + Debug> DatabaseFactory for SurrealStore<C> {
     async fn init(&self) -> Result<Self::Connection, Self::Error> {
         let inner = self.inner_instance.clone();
 
-        inner.use_ns(&self.namespace).await?;
-        inner.use_db(&self.db).await?;
+        //inner.use_ns(&self.namespace).await?;
+        //inner.use_db(&self.db).await?;
 
         Ok(SurrealConnection {
             namespace: self.namespace.clone(),
