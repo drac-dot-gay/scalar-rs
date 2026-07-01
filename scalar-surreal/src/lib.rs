@@ -268,11 +268,11 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
     ) -> Result<String, AuthenticationError<Self::Error>> {
         #[derive(SurrealValue)]
         #[surreal(crate = "surrealdb::types")]
-        struct OidcClaim {
-            subject: SerdeWrapper<SubjectIdentifier>,
-            username: SerdeWrapper<EndUserUsername>,
-            email: SerdeWrapper<EndUserEmail>,
-            pfp_url: Option<SerdeWrapper<EndUserPictureUrl>>,
+        struct OidcClaim<'a> {
+            subject: &'a str,
+            username: &'a str,
+            email: &'a str,
+            pfp_url: Option<&'a str>,
         }
 
         let result = self
@@ -282,13 +282,13 @@ impl<C: Connection + Debug> scalar_cms::DatabaseConnection for SurrealConnection
                 database: self.db.clone(),
                 access: "sc__editor".into(),
                 params: OidcClaim {
-                    subject: SerdeWrapper(user_info.subject().clone()),
-                    username: SerdeWrapper(user_info.preferred_username().unwrap().clone()),
-                    email: SerdeWrapper(user_info.email().unwrap().clone()),
+                    subject: user_info.subject(),
+                    username: user_info.preferred_username().unwrap(),
+                    email: user_info.email().unwrap(),
                     pfp_url: user_info
                         .picture()
-                        .and_then(|v| v.get(None).cloned())
-                        .map(SerdeWrapper),
+                        .and_then(|v| v.get(None))
+                        .map(|u| u.as_str()),
                 },
             })
             .await
