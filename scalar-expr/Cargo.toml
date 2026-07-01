@@ -1,5 +1,7 @@
 [package]
 name = "scalar-expr"
+license.workspace = true
+description = "validation expressions for scalar cms"
 authors = ["drac <drac@drac.gay>"]
 version = "0.2.0"
 edition = "2024"

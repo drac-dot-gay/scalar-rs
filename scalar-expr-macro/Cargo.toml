@@ -1,6 +1,8 @@
 [package]
 name = "scalar-expr-macro"
+license.workspace = true
 authors = ["drac <drac@drac.gay>"]
+description = "macro for scalar cms validation expressions"
 version = "0.2.0"
 edition = "2024"
 

@@ -1,6 +1,6 @@
 [package]
 name = "scalar-cms"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "a data oriented, [I'M NOT GOING TO SAY IT], ergonomic cms system"
 authors = ["drac <drac@drac.gay>"]
 version = "0.2.0"

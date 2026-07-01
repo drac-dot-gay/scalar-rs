@@ -6,8 +6,12 @@ members = [
     "scalar-derive",
     "scalar-img",
     "scalar-surreal",
-    "scalar-sqlx", "scalar-expr", "scalar-expr-macro",
+    "scalar-expr",
+    "scalar-expr-macro",
 ]
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 openidconnect = {version = "4", default-features = false}
