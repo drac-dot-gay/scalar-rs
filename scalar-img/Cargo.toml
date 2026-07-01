@@ -2,8 +2,8 @@
 name = "scalar-img"
 license = "MIT OR Apache-2.0"
 description = "s3 based image storage for scalar, a data oriented, [I'M NOT GOING TO SAY IT], ergonomic cms system"
-authors = ["Joe \"drac\" Sorensen <hello@murl.digital>"]
-version = "0.1.2"
+authors = ["drac <drac@drac.gay>"]
+version = "0.2.0"
 edition = "2021"
 
 [features]
@@ -17,7 +17,7 @@ bytes = "1"
 image = { version = "0.25" }
 image_hasher = "3"
 rust-s3 = {version = "0.37", optional = true}
-scalar-cms = { version = "0.1", path = "../scalar-cms", features = ["url"] }
+scalar-cms = { version = "0.2", path = "../scalar-cms", features = ["url"] }
 serde = {workspace = true}
 thiserror = {workspace = true}
 tokio = { version = "1", features = ["rt"] }

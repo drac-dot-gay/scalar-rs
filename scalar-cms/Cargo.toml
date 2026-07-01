@@ -2,16 +2,16 @@
 name = "scalar-cms"
 license = "MIT OR Apache-2.0"
 description = "a data oriented, [I'M NOT GOING TO SAY IT], ergonomic cms system"
-authors = ["Joe \"drac\" Sorensen <hello@murl.digital>"]
-version = "0.1.2"
+authors = ["drac <drac@drac.gay>"]
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
 nanoid = "0.4"
 rgb = { version = "0.8", optional = true, features = ["serde"] }
-scalar-derive = { version = "0.1.0", path = "../scalar-derive" }
-scalar-expr = {version = "0.1.0", path = "../scalar-expr"}
+scalar-derive = { version = "0.2", path = "../scalar-derive" }
+scalar-expr = {version = "0.2", path = "../scalar-expr"}
 # rc is enabled for EditorType, the copying issue is fine in this case, because we're dealing with a schema type.
 # serde = {workspace = true}
 serde_json = {workspace = true}

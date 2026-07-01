@@ -2,8 +2,8 @@
 name = "scalar-axum"
 license = "MIT OR Apache-2.0"
 description = "axum adapter for scalar, a data oriented, [I'M NOT GOING TO SAY IT], ergonomic cms system"
-authors = ["Joe \"drac\" Sorensen <hello@murl.digital>"]
-version = "0.1.2"
+authors = ["drac <drac@drac.gay>"]
+version = "0.2.0"
 edition = "2021"
 
 [features]
@@ -16,8 +16,8 @@ oidc = [
 [dependencies]
 axum = "0.8"
 rgb = { version = "0.8", features = ["serde"] }
-scalar-cms = { version = "0.1.0", path = "../scalar-cms", features = ["rgb"] }
-scalar-img = { version = "0.1.0", path = "../scalar-img", optional = true, features = ["s3"] }
+scalar-cms = { version = "0.2", path = "../scalar-cms", features = ["rgb"] }
+scalar-img = { version = "0.2", path = "../scalar-img", optional = true, features = ["s3"] }
 openidconnect = {workspace = true, default-features = true, optional = true}
 reqwest = "0.12"
 thiserror = "2"

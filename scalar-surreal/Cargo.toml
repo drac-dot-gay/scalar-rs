@@ -2,7 +2,8 @@
 name = "scalar-surreal"
 license = "MIT OR Apache-2.0"
 description = "surrealdb driver for scalar, a data oriented, [I'M NOT GOING TO SAY IT], ergonomic cms system"
-version = "0.1.2"
+authors = ["drac <drac@drac.gay>"]
+version = "0.2.0"
 edition = "2021"
 
 [features]
@@ -14,7 +15,7 @@ oidc = [
 [dependencies]
 num-traits = { version = "0.2.19", features = ["i128"] }
 openidconnect = { workspace = true, optional = true }
-scalar-cms = { version = "0.1", path = "../scalar-cms" }
+scalar-cms = { version = "0.2", path = "../scalar-cms" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 surrealdb = { version = "3", default-features = false }

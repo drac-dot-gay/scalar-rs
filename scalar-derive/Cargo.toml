@@ -2,8 +2,8 @@
 name = "scalar-derive"
 license = "MIT OR Apache-2.0"
 description = "derive macros for scalar, a data oriented, [I'M NOT GOING TO SAY IT], ergonomic cms system"
-authors = ["Joe \"drac\" Sorensen <hello@murl.digital>"]
-version = "0.1.2"
+authors = ["drac <drac@drac.gay>"]
+version = "0.2.0"
 edition = "2021"
 
 [lib]
