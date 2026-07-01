@@ -506,9 +506,10 @@ pub async fn complete_oidc_auth<
         .id_token()
         .ok_or(axum::http::StatusCode::BAD_REQUEST)?;
     let id_token_verifier = oidc_state.oidc_client().id_token_verifier();
-    let claims = id_token
-        .claims(&id_token_verifier, &nonce)
-        .map_err(|_| axum::http::StatusCode::UNAUTHORIZED)?;
+    let claims = id_token.claims(&id_token_verifier, &nonce).map_err(|e| {
+        tracing::error!(%e);
+        axum::http::StatusCode::UNAUTHORIZED
+    })?;
 
     if let Some(expected_access_token_hash) = claims.access_token_hash() {
         let actual_access_token_hash = AccessTokenHash::from_token(
@@ -518,6 +519,7 @@ pub async fn complete_oidc_auth<
         )
         .unwrap();
         if actual_access_token_hash != *expected_access_token_hash {
+            tracing::error!("hash mismatch");
             return Err(axum::http::StatusCode::UNAUTHORIZED);
         }
     }
